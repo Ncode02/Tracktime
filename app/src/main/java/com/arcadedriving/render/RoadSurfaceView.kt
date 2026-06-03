@@ -78,6 +78,10 @@ internal class RoadRenderThread(
     private var dashPhase  = 0f   // 0..1, avanza con la velocidad
     private var flashPhase = 0f   // 0..2π, para parpadeo LIMIT
 
+    // Punto de fuga suavizado (interpolación para curvas fluidas)
+    private var smoothVpX = -1f   // -1 = no inicializado aún
+    private val VP_ALPHA  = 0.09f // factor IIR: más bajo = curva más lenta/suave
+
     private val hudTypeface = Typeface.create(Typeface.MONOSPACE, Typeface.BOLD)
 
     // ─── Estrellas ────────────────────────────────────────────────────────────
@@ -140,10 +144,12 @@ internal class RoadRenderThread(
         val neonColor = neonColorFor(state)
         val horizonY  = h * 0.38f
 
-        // Punto de fuga se desplaza con la dirección de curva
-        // steerDirection > 0 → girando derecha → carretera se tuerce a la derecha
-        val curvePush = state.steerDirection * w * 0.20f
-        val vpX = (w / 2f + curvePush).coerceIn(w * 0.18f, w * 0.82f)
+        // Punto de fuga con curva exagerada + interpolación IIR para transiciones fluidas
+        // steerDirection > 0 → girando derecha → horizonte se mueve a la derecha
+        val targetVpX = w / 2f + state.steerDirection * w * 0.38f
+        if (smoothVpX < 0f) smoothVpX = w / 2f   // inicializar al centro la primera vez
+        smoothVpX = VP_ALPHA * targetVpX + (1f - VP_ALPHA) * smoothVpX
+        val vpX = smoothVpX.coerceIn(w * 0.12f, w * 0.88f)
 
         // ── Capas ──────────────────────────────────────────────────────────────
         drawSky(canvas, w, horizonY)
@@ -152,6 +158,8 @@ internal class RoadRenderThread(
         drawHorizonGlow(canvas, w, horizonY, neonColor)
         drawRoad(canvas, w, h, vpX, horizonY, neonColor)
         drawCenterDashes(canvas, w, h, vpX, horizonY, neonColor)
+        drawSpeedLines(canvas, w, h, vpX, horizonY, state, neonColor)
+        drawGVignette(canvas, w, h, state)
         drawHUD(canvas, w, h, state, neonColor)
     }
 
@@ -326,17 +334,17 @@ internal class RoadRenderThread(
         paint.typeface = hudTypeface
         paint.style    = Paint.Style.FILL
 
-        // ── Etiqueta de estado (arriba centro) ────────────────────────────────
-        paint.textSize  = h * 0.040f
-        paint.textAlign = Paint.Align.CENTER
-        paint.color = Color.argb(210, r, g, b)
-        canvas.drawText(state.gForceState.label, w / 2f, h * 0.065f, paint)
-
-        // ── Valor G (arriba derecha) ──────────────────────────────────────────
+        // ── Valor G (arriba derecha, fuera del área del minimapa) ─────────────
         paint.textSize  = h * 0.030f
         paint.textAlign = Paint.Align.RIGHT
-        paint.color = Color.argb(170, r, g, b)
-        canvas.drawText("%.2fG".format(state.gTotal), w - 28f, h * 0.065f, paint)
+        paint.color = Color.argb(180, r, g, b)
+        canvas.drawText("%.2fG".format(state.gTotal), w - 28f, h * 0.055f, paint)
+
+        // ── Etiqueta de estado (encima del velocímetro) ───────────────────────
+        paint.textSize  = h * 0.032f
+        paint.textAlign = Paint.Align.CENTER
+        paint.color = Color.argb(200, r, g, b)
+        canvas.drawText(state.gForceState.label, w / 2f, h * 0.870f, paint)
 
         // ── Velocímetro (abajo centro) ────────────────────────────────────────
         val speedStr = if (state.speedKmh < 0f) "--  km/h"
@@ -406,6 +414,85 @@ internal class RoadRenderThread(
         paint.typeface  = hudTypeface
         paint.color = Color.argb(110, r, g, b)
         canvas.drawText("G", cx, cy + radius + radius * 0.56f, paint)
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  EFECTOS DE VELOCIDAD Y G
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Líneas radiales desde el horizonte que se intensifican con la velocidad.
+     * Generan sensación de túnel / warp speed.
+     * Activas a partir de 40 km/h.
+     */
+    private fun drawSpeedLines(
+        canvas: Canvas, w: Float, h: Float,
+        vpX: Float, horizonY: Float,
+        state: DriveState, neonColor: Int
+    ) {
+        val speed = if (state.speedKmh < 0f) 0f else state.speedKmh
+        if (speed < 40f) return
+
+        val intensity = ((speed - 40f) / 80f).coerceIn(0f, 1f)   // 0 a 120+ km/h
+        val numLines  = (10 + intensity * 18).toInt()
+        val alpha     = (intensity * 100).toInt()
+        val startFrac = 0.18f + intensity * 0.12f  // las líneas empiezan más lejos del VP
+
+        val r = Color.red(neonColor); val g = Color.green(neonColor); val b = Color.blue(neonColor)
+        paint.style     = Paint.Style.STROKE
+        paint.strokeCap = Paint.Cap.BUTT
+
+        for (i in 0 until numLines) {
+            val angle  = (i.toFloat() / numLines) * 2f * PI.toFloat()
+            val dx     = cos(angle).toFloat()
+            val dy     = sin(angle).toFloat()
+            val dist   = maxOf(w, h) * 1.2f
+
+            val startX = vpX + dx * dist * startFrac
+            val startY = horizonY + dy * dist * startFrac
+            val endX   = vpX + dx * dist
+            val endY   = horizonY + dy * dist
+
+            paint.strokeWidth = lerp(0.8f, 2.5f, intensity)
+            paint.color = Color.argb(alpha, r, g, b)
+            canvas.drawLine(startX, startY, endX, endY, paint)
+        }
+    }
+
+    /**
+     * Viñeta de borde de pantalla que se activa con G alta (≥ 0.5).
+     * - FUN_ZONE (0.5-0.85G): viñeta suave del color neón actual
+     * - LIMIT (≥ 0.85G):      viñeta roja intensa que parpadea con flashPhase
+     * Crea sensación física de las fuerzas en el cuerpo.
+     */
+    private fun drawGVignette(canvas: Canvas, w: Float, h: Float, state: DriveState) {
+        val gT = state.gTotal
+        if (gT < 0.45f) return
+
+        val (vigColor, vigAlpha) = when (state.gForceState) {
+            GForceState.FUN_ZONE -> {
+                val intensity = ((gT - 0.50f) / 0.35f).coerceIn(0f, 1f)
+                Pair(Color.parseColor("#FFE600"), (intensity * 55).toInt())
+            }
+            GForceState.LIMIT -> {
+                val pulse = (sin(flashPhase * 1.5f) + 1f) / 2f
+                Pair(Color.parseColor("#FF1800"), (40 + pulse * 65).toInt())
+            }
+            else -> return
+        }
+
+        val rV = Color.red(vigColor); val gV = Color.green(vigColor); val bV = Color.blue(vigColor)
+        val shader = RadialGradient(
+            w / 2f, h / 2f,
+            maxOf(w, h) * 0.72f,
+            Color.argb(0, rV, gV, bV),
+            Color.argb(vigAlpha, rV, gV, bV),
+            Shader.TileMode.CLAMP
+        )
+        paint.shader = shader
+        paint.style  = Paint.Style.FILL
+        canvas.drawRect(0f, 0f, w, h, paint)
+        paint.shader = null
     }
 
     // ─────────────────────────────────────────────────────────────────────────

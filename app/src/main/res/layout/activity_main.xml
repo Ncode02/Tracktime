@@ -9,12 +9,12 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
-    <!-- Mini-mapa circular OSM en la zona del cielo (top-left) -->
+    <!-- Mini-mapa circular OSM centrado en el cielo, debajo del texto CRUISING -->
     <com.arcadedriving.render.MiniMapView
         android:id="@+id/miniMapView"
-        android:layout_width="128dp"
-        android:layout_height="128dp"
-        android:layout_gravity="top|start"
-        android:layout_margin="12dp" />
+        android:layout_width="220dp"
+        android:layout_height="220dp"
+        android:layout_gravity="top|center_horizontal"
+        android:layout_marginTop="48dp" />
 
 </FrameLayout>
