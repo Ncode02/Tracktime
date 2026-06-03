@@ -8,6 +8,8 @@ import android.view.View
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import com.arcadedriving.model.GForceState
+import com.arcadedriving.render.MiniMapView
 import com.arcadedriving.render.RoadSurfaceView
 import com.arcadedriving.sensor.SensorEngine
 import com.arcadedriving.voice.VoiceEngine
@@ -72,10 +74,10 @@ class MainActivity : AppCompatActivity() {
     }
 
     /** Color neón base según estado G (sin parpadeo, eso lo maneja RoadSurfaceView). */
-    private fun neonColorFor(state: com.arcadedriving.model.GForceState): Int = when (state) {
-        com.arcadedriving.model.GForceState.CRUISING -> android.graphics.Color.parseColor("#00BFFF")
-        com.arcadedriving.model.GForceState.FUN_ZONE -> android.graphics.Color.parseColor("#FFE600")
-        com.arcadedriving.model.GForceState.LIMIT    -> android.graphics.Color.parseColor("#FF2200")
+    private fun neonColorFor(state: GForceState): Int = when (state) {
+        GForceState.CRUISING -> android.graphics.Color.parseColor("#00BFFF")
+        GForceState.FUN_ZONE -> android.graphics.Color.parseColor("#FFE600")
+        GForceState.LIMIT    -> android.graphics.Color.parseColor("#FF2200")
     }
 
     // ─── GPS ───────────────────────────────────────────────────────────────────
