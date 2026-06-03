@@ -164,8 +164,8 @@ internal class RoadRenderThread(
         drawGround(canvas, w, h, horizonY)
         drawStars(canvas, w, horizonY)
         drawHorizonGlow(canvas, w, horizonY, neonColor)
-        drawRoad(canvas, w, h, vpX, horizonY, neonColor)
-        drawCenterDashes(canvas, w, h, vpX, horizonY, neonColor)
+        drawRoad(canvas, w, h, vpX, horizonY, neonColor, steerFrac)
+        drawCenterDashes(canvas, w, h, vpX, horizonY, neonColor, steerFrac)
         drawSpeedLines(canvas, w, h, vpX, horizonY, state, neonColor)
         drawGVignette(canvas, w, h, state)
         drawHUD(canvas, w, h, state, neonColor)
@@ -243,7 +243,7 @@ internal class RoadRenderThread(
 
     private fun drawRoad(
         canvas: Canvas, w: Float, h: Float,
-        vpX: Float, horizonY: Float, neonColor: Int
+        vpX: Float, horizonY: Float, neonColor: Int, steerFrac: Float
     ) {
         val halfBottom  = w * 0.37f
         val halfHorizon = 13f
@@ -251,44 +251,49 @@ internal class RoadRenderThread(
         val lBot = w / 2f - halfBottom;  val rBot = w / 2f + halfBottom
         val lHrz = vpX - halfHorizon;    val rHrz = vpX + halfHorizon
 
-        // Relleno de asfalto oscuro
+        // Punto de control para curva bezier (a media altura, desplazado en dir de la curva)
+        val midY      = lerp(horizonY, h, 0.52f)
+        val curvePush = steerFrac * w * 0.20f
+        val lMid      = lerp(lBot, lHrz, 0.5f) + curvePush
+        val rMid      = lerp(rBot, rHrz, 0.5f) + curvePush
+
+        // Relleno de asfalto — forma curva real con bezier
         path.reset()
-        path.moveTo(lBot, h); path.lineTo(rBot, h)
-        path.lineTo(rHrz, horizonY); path.lineTo(lHrz, horizonY)
+        path.moveTo(lBot, h)
+        path.quadTo(lMid, midY, lHrz, horizonY)
+        path.lineTo(rHrz, horizonY)
+        path.quadTo(rMid, midY, rBot, h)
         path.close()
         paint.color = Color.parseColor("#0D0D0D")
         paint.style = Paint.Style.FILL
         canvas.drawPath(path, paint)
 
-        // Bordes neón con glow multicapa
-        drawNeonLine(canvas, lBot, h, lHrz, horizonY, neonColor)
-        drawNeonLine(canvas, rBot, h, rHrz, horizonY, neonColor)
+        // Bordes neón curvados
+        val leftEdge  = Path().apply { moveTo(lBot, h); quadTo(lMid, midY, lHrz, horizonY) }
+        val rightEdge = Path().apply { moveTo(rBot, h); quadTo(rMid, midY, rHrz, horizonY) }
+        drawNeonPath(canvas, leftEdge,  neonColor)
+        drawNeonPath(canvas, rightEdge, neonColor)
     }
 
     /**
-     * Dibuja una línea con efecto glow neón.
-     * 4 pasadas: outer glow → mid glow → inner glow → core brillante
+     * Dibuja un path curvo con efecto glow neón de 4 pasadas.
      */
-    private fun drawNeonLine(
-        canvas: Canvas,
-        x1: Float, y1: Float, x2: Float, y2: Float,
-        color: Int
-    ) {
+    private fun drawNeonPath(canvas: Canvas, p: Path, color: Int) {
         val r = Color.red(color); val g = Color.green(color); val b = Color.blue(color)
-        paint.style    = Paint.Style.STROKE
+        paint.style     = Paint.Style.STROKE
         paint.strokeCap = Paint.Cap.BUTT
 
-        paint.strokeWidth = 30f; paint.color = Color.argb(15, r, g, b)
-        canvas.drawLine(x1, y1, x2, y2, paint)
+        paint.strokeWidth = 30f;  paint.color = Color.argb(15,  r, g, b)
+        canvas.drawPath(p, paint)
 
-        paint.strokeWidth = 16f; paint.color = Color.argb(50, r, g, b)
-        canvas.drawLine(x1, y1, x2, y2, paint)
+        paint.strokeWidth = 16f;  paint.color = Color.argb(50,  r, g, b)
+        canvas.drawPath(p, paint)
 
-        paint.strokeWidth = 7f;  paint.color = Color.argb(120, r, g, b)
-        canvas.drawLine(x1, y1, x2, y2, paint)
+        paint.strokeWidth = 7f;   paint.color = Color.argb(120, r, g, b)
+        canvas.drawPath(p, paint)
 
         paint.strokeWidth = 2.2f; paint.color = Color.argb(255, r, g, b)
-        canvas.drawLine(x1, y1, x2, y2, paint)
+        canvas.drawPath(p, paint)
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -302,27 +307,31 @@ internal class RoadRenderThread(
      */
     private fun drawCenterDashes(
         canvas: Canvas, w: Float, h: Float,
-        vpX: Float, horizonY: Float, neonColor: Int
+        vpX: Float, horizonY: Float, neonColor: Int, steerFrac: Float
     ) {
         val centerXBot = w / 2f
+        val curvePush  = steerFrac * w * 0.20f
+        // Punto de control bezier para el centro (misma curva que el asfalto)
+        val ctrlX      = (vpX + centerXBot) / 2f + curvePush
         val numDashes  = 14
-        val dashLen    = 0.40f / numDashes   // longitud de cada raya en espacio t
+        val dashLen    = 0.40f / numDashes
         val r = Color.red(neonColor); val g = Color.green(neonColor); val b = Color.blue(neonColor)
 
-        paint.style    = Paint.Style.STROKE
+        paint.style     = Paint.Style.STROKE
         paint.strokeCap = Paint.Cap.ROUND
 
         for (i in 0 until numDashes) {
             val tTop = ((i.toFloat() / numDashes) + dashPhase) % 1f
             val tBot = (tTop + dashLen).coerceAtMost(1f)
 
-            if (tTop < 0.04f) continue     // invisible cerca del horizonte
-            if (tBot <= tTop) continue     // raya fuera de rango
+            if (tTop < 0.04f) continue
+            if (tBot <= tTop) continue
 
             val yTop = lerp(horizonY, h, tTop)
             val yBot = lerp(horizonY, h, tBot)
-            val xTop = lerp(vpX, centerXBot, tTop)
-            val xBot = lerp(vpX, centerXBot, tBot)
+            // Quadratic bezier: t=0 → vpX (horizonte), t=1 → centerXBot (abajo)
+            val xTop = bezierX(tTop, vpX, ctrlX, centerXBot)
+            val xBot = bezierX(tBot, vpX, ctrlX, centerXBot)
 
             val alpha  = (tTop * 215).toInt().coerceIn(0, 215)
             val strokeW = lerp(1f, 5f, tTop)
@@ -331,6 +340,12 @@ internal class RoadRenderThread(
             paint.color = Color.argb(alpha, r, g, b)
             canvas.drawLine(xTop, yTop, xBot, yBot, paint)
         }
+    }
+
+    /** Quadratic bezier en 1D: t=0→p0, t=0.5→~p1, t=1→p2 */
+    private fun bezierX(t: Float, p0: Float, p1: Float, p2: Float): Float {
+        val inv = 1f - t
+        return inv * inv * p0 + 2f * inv * t * p1 + t * t * p2
     }
 
     // ─────────────────────────────────────────────────────────────────────────

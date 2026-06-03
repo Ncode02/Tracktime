@@ -29,6 +29,7 @@ class MiniMapView @JvmOverloads constructor(
     @Volatile var latitude:    Double  = 0.0
     @Volatile var longitude:   Double  = 0.0
     @Volatile var hasLocation: Boolean = false
+    @Volatile var mapBearing:  Float   = 0f   // rumbo GPS en grados (0=Norte, 90=Este)
 
     private var neonColor: Int = Color.parseColor("#00BFFF")
 
@@ -58,32 +59,35 @@ class MiniMapView @JvmOverloads constructor(
     override fun onDraw(canvas: Canvas) {
         val w    = width.toFloat()
         val h    = height.toFloat()
-        val mapH = h * HORIZON_FRAC          // altura del área de mapa
+        val mapH = h * HORIZON_FRAC
         if (w == 0f || mapH == 0f) return
 
         val cx = w / 2f
         val cy = mapH / 2f
 
-        // Clip estricto al área del cielo
+        // 1) Tiles con rotación heading-up (el rumbo GPS apunta siempre arriba)
         canvas.save()
         canvas.clipRect(0f, 0f, w, mapH)
-
+        if (mapBearing != 0f) canvas.rotate(-mapBearing, cx, cy)
         if (hasLocation) {
             drawTiles(canvas, w, mapH, cx, cy)
         } else {
             drawPlaceholder(canvas, w, mapH, cx, cy)
         }
-
-        // Gradiente de fundido inferior (cielo → horizonte)
-        drawBottomFade(canvas, w, mapH)
-
         canvas.restore()
 
-        // Crosshair sobre el clip (siempre encima de los tiles)
+        // 2) Fundido inferior (no rotado)
+        canvas.save()
+        canvas.clipRect(0f, 0f, w, mapH)
+        drawBottomFade(canvas, w, mapH)
+        canvas.restore()
+
+        // 3) Crosshair + brújula (no rotados, siempre encima)
         if (hasLocation) {
             canvas.save()
             canvas.clipRect(0f, 0f, w, mapH)
             drawCrosshair(canvas, cx, cy)
+            drawCompass(canvas, w, mapH)
             canvas.restore()
         }
     }
@@ -105,8 +109,8 @@ class MiniMapView @JvmOverloads constructor(
         val scale          = w / (TILE_SIZE * TILES_WIDE)
         val tileScreenSize = TILE_SIZE * scale
 
-        for (dy in -3..3) {
-            for (dx in -3..3) {
+        for (dy in -5..5) {
+            for (dx in -5..5) {
                 val tx        = tileX + dx
                 val ty        = tileY + dy
                 if (ty < 0 || ty >= n.toInt()) continue
@@ -131,6 +135,66 @@ class MiniMapView @JvmOverloads constructor(
                 }
             }
         }
+    }
+
+    // ─── Brújula (indicador de Norte) ────────────────────────────────────────────
+
+    /**
+     * Mini brújula en la esquina superior izquierda.
+     * La aguja roja apunta siempre hacia el Norte geográfico
+     * aunque el mapa esté rotado (heading-up).
+     * mapBearing = rumbo actual: la aguja se rota -mapBearing para compensar.
+     */
+    private fun drawCompass(canvas: Canvas, w: Float, mapH: Float) {
+        val icx = w * 0.07f
+        val icy = mapH * 0.22f
+        val r   = mapH * 0.08f
+
+        // Fondo circular oscuro
+        uiPaint.style = Paint.Style.FILL
+        uiPaint.color = Color.argb(140, 0, 0, 0)
+        canvas.drawCircle(icx, icy, r, uiPaint)
+
+        uiPaint.style       = Paint.Style.STROKE
+        uiPaint.strokeWidth = 1.2f
+        uiPaint.color       = Color.argb(90, 0, 191, 255)
+        canvas.drawCircle(icx, icy, r, uiPaint)
+
+        // Aguja girada con el bearing (Norte siempre visible en su posición real)
+        canvas.save()
+        canvas.rotate(-mapBearing, icx, icy)
+
+        // Mitad Norte (roja, apunta arriba cuando mapBearing==0)
+        uiPaint.style = Paint.Style.FILL
+        uiPaint.color = Color.argb(230, 255, 50, 50)
+        val np = Path()
+        np.moveTo(icx, icy - r * 0.78f)
+        np.lineTo(icx - r * 0.22f, icy + r * 0.05f)
+        np.lineTo(icx + r * 0.22f, icy + r * 0.05f)
+        np.close()
+        canvas.drawPath(np, uiPaint)
+
+        // Mitad Sur (gris)
+        uiPaint.color = Color.argb(150, 140, 140, 140)
+        val sp = Path()
+        sp.moveTo(icx, icy + r * 0.78f)
+        sp.lineTo(icx - r * 0.22f, icy + r * 0.05f)
+        sp.lineTo(icx + r * 0.22f, icy + r * 0.05f)
+        sp.close()
+        canvas.drawPath(sp, uiPaint)
+
+        canvas.restore()
+
+        // Letra "N" fija en la punta de la aguja girada
+        canvas.save()
+        canvas.rotate(-mapBearing, icx, icy)
+        uiPaint.style     = Paint.Style.FILL
+        uiPaint.color     = Color.argb(220, 255, 210, 210)
+        uiPaint.textAlign = Paint.Align.CENTER
+        uiPaint.typeface  = hudTypeface
+        uiPaint.textSize  = r * 0.60f
+        canvas.drawText("N", icx, icy - r * 0.88f, uiPaint)
+        canvas.restore()
     }
 
     // ─── Placeholder sin GPS ──────────────────────────────────────────────────
@@ -259,7 +323,9 @@ class MiniMapView @JvmOverloads constructor(
     //  API PÚBLICA
     // ─────────────────────────────────────────────────────────────────────────
 
-    fun updateLocation(lat: Double, lon: Double) {
+    // ─── Crosshair de posición ────────────────────────────────────────────
+
+    private fun drawCrosshair
         latitude    = lat
         longitude   = lon
         hasLocation = true
@@ -273,7 +339,21 @@ class MiniMapView @JvmOverloads constructor(
         }
     }
 
-    fun zoomIn() {
+    fun setBearing(degrees: Float) {
+        if (mapBearing != degrees) {
+            mapBearing = degrees
+            post { invalidate() }
+        }
+    }
+
+    fun setBearing(degrees: Float) {
+        if (mapBearing != degrees) {
+            mapBearing = degrees
+            post { invalidate() }
+        }
+    }
+
+    fun updateLocation(lat: Double, lon: Double) {
         if (ZOOM < ZOOM_MAX) {
             ZOOM++
             clearTileCache()

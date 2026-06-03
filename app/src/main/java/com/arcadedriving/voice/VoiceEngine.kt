@@ -99,6 +99,24 @@ class VoiceEngine(context: Context) : TextToSpeech.OnInitListener {
         tts.shutdown()
     }
 
+    /**
+     * Anuncia una curva detectada por GPS.
+     * @param radiusMeters radio estimado en metros (speed / headingRate_rad_s)
+     * @param isRight true = giro a la derecha
+     */
+    fun announceCurve(radiusMeters: Float, isRight: Boolean) {
+        if (!ready.get()) return
+        val dir = if (isRight) "derecha" else "izquierda"
+        val (tipo, queue) = when {
+            radiusMeters < 60f  -> Pair("¡Muy cerrada! ¡Frena!",  TextToSpeech.QUEUE_FLUSH)
+            radiusMeters < 150f -> Pair("cerrada",                 TextToSpeech.QUEUE_ADD)
+            radiusMeters < 400f -> Pair("abierta",                 TextToSpeech.QUEUE_ADD)
+            else                -> Pair("muy abierta",             TextToSpeech.QUEUE_ADD)
+        }
+        tts.speak("Curva $tipo, $dir", queue, null, "curve_${System.nanoTime()}")
+        speaking.set(true)
+    }
+
     // ─── Interno ──────────────────────────────────────────────────────────────
 
     private fun speak(text: String) {
