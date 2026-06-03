@@ -59,6 +59,8 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
         sensorEngine.start()
+        // Reinicia GPS: puede haberse parado en onPause (ej. al volver del diálogo de permisos)
+        startLocationUpdates()
     }
 
     override fun onPause() {
