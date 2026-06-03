@@ -36,7 +36,9 @@ class MiniMapView @JvmOverloads constructor(
     private val HORIZON_FRAC = 0.38f
 
     // Zoom 17 → tile ≈ 300 m de ancho a latitud 40°. Se ven ~3 tiles → ~900 m
-    private val ZOOM       = 17
+    private var ZOOM       = 17
+    private val ZOOM_MIN   = 14   // zoom out: ~5 km
+    private val ZOOM_MAX   = 19   // zoom in: ~50 m
     private val TILE_SIZE  = 256
     // Tiles visibles en el ancho de pantalla completo
     private val TILES_WIDE = 3.2f
@@ -269,6 +271,28 @@ class MiniMapView @JvmOverloads constructor(
             neonColor = color
             post { invalidate() }
         }
+    }
+
+    fun zoomIn() {
+        if (ZOOM < ZOOM_MAX) {
+            ZOOM++
+            clearTileCache()
+            post { invalidate() }
+        }
+    }
+
+    fun zoomOut() {
+        if (ZOOM > ZOOM_MIN) {
+            ZOOM--
+            clearTileCache()
+            post { invalidate() }
+        }
+    }
+
+    private fun clearTileCache() {
+        tileCache.values.forEach { if (!it.isRecycled) it.recycle() }
+        tileCache.clear()
+        loadingTiles.clear()
     }
 
     fun destroy() {

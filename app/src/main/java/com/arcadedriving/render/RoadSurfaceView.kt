@@ -144,10 +144,18 @@ internal class RoadRenderThread(
         val neonColor = neonColorFor(state)
         val horizonY  = h * 0.38f
 
-        // Punto de fuga con curva exagerada + interpolación IIR para transiciones fluidas
-        // steerDirection > 0 → girando derecha → horizonte se mueve a la derecha
-        val targetVpX = w / 2f + state.steerDirection * w * 0.38f
-        if (smoothVpX < 0f) smoothVpX = w / 2f   // inicializar al centro la primera vez
+        // Punto de fuga con curva desde GPS heading rate.
+        // headingRate en grados/s: +derecha/-izquierda.
+        //   ±20 °/s (curva cerrada) → steerFrac = ±1.0
+        // Cuando el GPS no tiene señal (headingRate==0) se usa el acelerómetro como
+        // fallback (steerDirection) con escala reducida para no saltar sin moverse.
+        val steerFrac = if (state.speedKmh > 5f && state.headingRate != 0f)
+            (state.headingRate / 20f).coerceIn(-1f, 1f)
+        else
+            (state.steerDirection * 0.4f).coerceIn(-1f, 1f)
+
+        val targetVpX = w / 2f + steerFrac * w * 0.32f
+        if (smoothVpX < 0f) smoothVpX = w / 2f
         smoothVpX = VP_ALPHA * targetVpX + (1f - VP_ALPHA) * smoothVpX
         val vpX = smoothVpX.coerceIn(w * 0.12f, w * 0.88f)
 
@@ -334,11 +342,8 @@ internal class RoadRenderThread(
         paint.typeface = hudTypeface
         paint.style    = Paint.Style.FILL
 
-        // ── Valor G (arriba derecha, fuera del área del minimapa) ─────────────
-        paint.textSize  = h * 0.030f
-        paint.textAlign = Paint.Align.RIGHT
-        paint.color = Color.argb(180, r, g, b)
-        canvas.drawText("%.2fG".format(state.gTotal), w - 28f, h * 0.055f, paint)
+        // ── Valor G (arriba derecha) ──────────────────────────────────────────
+        // Quitado del top-right (queda tapado por el mapa) → se dibuja sobre el G-meter
 
         // ── Etiqueta de estado (encima del velocímetro) ───────────────────────
         paint.textSize  = h * 0.032f
@@ -370,6 +375,12 @@ internal class RoadRenderThread(
         val maxG   = 0.85f
 
         val r = Color.red(neonColor); val g = Color.green(neonColor); val b = Color.blue(neonColor)
+
+        // ── Valor G encima del círculo ───────────────────────────────────────
+        paint.textSize  = radius * 0.62f
+        paint.textAlign = Paint.Align.CENTER
+        paint.color     = Color.argb(230, r, g, b)
+        canvas.drawText("%.2fG".format(state.gTotal), cx, cy - radius - 10f, paint)
 
         // Fondo semitransparente
         paint.style = Paint.Style.FILL

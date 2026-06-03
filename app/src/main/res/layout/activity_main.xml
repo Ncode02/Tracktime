@@ -15,4 +15,46 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Botones de zoom del mapa: encima del MiniMapView (z-order por orden XML) -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="top|end"
+        android:layout_marginTop="6dp"
+        android:layout_marginEnd="6dp"
+        android:orientation="vertical">
+
+        <TextView
+            android:id="@+id/btnMapZoomIn"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:text="+"
+            android:textSize="24sp"
+            android:textColor="#00BFFF"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:background="#66000020"
+            android:fontFamily="monospace"
+            android:clickable="true"
+            android:focusable="true" />
+
+        <View
+            android:layout_width="match_parent"
+            android:layout_height="4dp" />
+
+        <TextView
+            android:id="@+id/btnMapZoomOut"
+            android:layout_width="42dp"
+            android:layout_height="42dp"
+            android:text="−"
+            android:textSize="24sp"
+            android:textColor="#00BFFF"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:background="#66000020"
+            android:fontFamily="monospace"
+            android:clickable="true"
+            android:focusable="true" />
+    </LinearLayout>
+
 </FrameLayout>

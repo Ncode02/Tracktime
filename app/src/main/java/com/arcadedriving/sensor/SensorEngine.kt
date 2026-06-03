@@ -72,6 +72,14 @@ class SensorEngine(
         currentState = currentState.copy(speedKmh = speedKmh)
     }
 
+    /**
+     * Llamar desde el callback de GPS con la variación de rumbo en grados/segundo.
+     * Positivo = girando a la derecha, negativo = izquierda.
+     */
+    fun updateHeadingRate(degreesPerSec: Float) {
+        currentState = currentState.copy(headingRate = degreesPerSec)
+    }
+
     fun getCurrentState(): DriveState = currentState
 
     // ─── SensorEventListener ──────────────────────────────────────────────────
@@ -107,7 +115,8 @@ class SensorEngine(
             gTotal         = gTotal,
             gForceState    = GForceState.from(gTotal),
             speedKmh       = currentState.speedKmh,
-            steerDirection = steerDir
+            steerDirection = steerDir,
+            headingRate    = currentState.headingRate
         )
 
         currentState = newState

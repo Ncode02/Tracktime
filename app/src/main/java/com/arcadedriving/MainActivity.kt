@@ -8,6 +8,7 @@ import android.view.View
 import android.view.WindowManager
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.app.ActivityCompat
+import android.widget.TextView
 import com.arcadedriving.model.GForceState
 import com.arcadedriving.render.MiniMapView
 import com.arcadedriving.render.RoadSurfaceView
@@ -24,6 +25,10 @@ class MainActivity : AppCompatActivity() {
     private lateinit var fusedLocation: FusedLocationProviderClient
 
     private val PERMISSION_REQUEST = 1001
+
+    // Seguimiento del rumbo GPS para calcular la tasa de giro
+    private var lastBearing    = Float.NaN
+    private var lastBearingMs  = 0L
 
     // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -42,6 +47,10 @@ class MainActivity : AppCompatActivity() {
         setContentView(R.layout.activity_main)
         roadView    = findViewById(R.id.roadSurfaceView)
         miniMapView = findViewById(R.id.miniMapView)
+
+        // Botones de zoom del mapa
+        findViewById<TextView>(R.id.btnMapZoomIn).setOnClickListener  { miniMapView.zoomIn()  }
+        findViewById<TextView>(R.id.btnMapZoomOut).setOnClickListener { miniMapView.zoomOut() }
 
         voiceEngine  = VoiceEngine(this)
         sensorEngine = SensorEngine(this) { state ->
@@ -87,10 +96,27 @@ class MainActivity : AppCompatActivity() {
     private val locationCallback = object : LocationCallback() {
         override fun onLocationResult(result: LocationResult) {
             val loc: Location = result.lastLocation ?: return
-            // loc.speed está en m/s → convertir a km/h
             sensorEngine.updateSpeed(loc.speed * 3.6f)
-            // Actualizar posición del minimapa
             miniMapView.updateLocation(loc.latitude, loc.longitude)
+
+            // ── Calcular tasa de giro en grados/s desde el rumbo GPS ──────────
+            // loc.bearing sólo es fiable cuando hay movimiento (> ~5 km/h)
+            if (loc.hasBearing() && loc.speed > 1.4f) {  // 1.4 m/s ≈ 5 km/h
+                val now = System.currentTimeMillis()
+                if (!lastBearing.isNaN() && now > lastBearingMs) {
+                    val dt = (now - lastBearingMs) / 1000f
+                    var delta = loc.bearing - lastBearing
+                    // Normalizar a [-180, 180] para cruzar el 0°/360°
+                    if (delta >  180f) delta -= 360f
+                    if (delta < -180f) delta += 360f
+                    sensorEngine.updateHeadingRate(delta / dt)
+                }
+                lastBearing   = loc.bearing
+                lastBearingMs = System.currentTimeMillis()
+            } else if (loc.speed <= 1.4f) {
+                sensorEngine.updateHeadingRate(0f)  // parado = carretera recta
+                lastBearing = Float.NaN
+            }
         }
     }
 
