@@ -1,0 +1,55 @@
+name: Build ArcadeDrive APK
+
+# Se ejecuta al hacer push a main/master o manualmente desde GitHub
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Descarga el código
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # 2. JDK 17 (requerido por AGP 8.x)
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      # 3. Instala Gradle 8.6 directamente (sin necesitar gradle-wrapper.jar)
+      - name: Setup Gradle 8.6
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.6'
+
+      # 4. El runner ubuntu-latest incluye el Android SDK en esta ruta
+      - name: Create local.properties
+        run: echo "sdk.dir=/usr/local/lib/android/sdk" > local.properties
+
+      # 5. Cache de dependencias Gradle para builds más rápidos
+      - name: Cache Gradle packages
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: gradle-${{ hashFiles('**/*.gradle.kts', '**/gradle.properties') }}
+          restore-keys: gradle-
+
+      # 6. Compila el APK debug
+      - name: Build Debug APK
+        run: gradle assembleDebug --no-daemon --stacktrace
+
+      # 7. Sube el APK como artefacto descargable desde la web de GitHub
+      - name: Upload APK artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ArcadeDrive-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 30

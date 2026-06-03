@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Neón por estado G -->
+    <color name="neon_blue">#00BFFF</color>       <!-- CRUISING  -->
+    <color name="neon_yellow">#FFE600</color>     <!-- FUN_ZONE  -->
+    <color name="neon_red">#FF2200</color>        <!-- LIMIT core -->
+    <color name="neon_orange">#FF5500</color>     <!-- LIMIT glow -->
+
+    <!-- Fondos -->
+    <color name="bg_sky_top">#04040F</color>
+    <color name="bg_sky_bottom">#16072A</color>
+    <color name="bg_ground">#080808</color>
+    <color name="road_asphalt">#0D0D0D</color>
+</resources>
