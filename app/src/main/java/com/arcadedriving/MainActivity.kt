@@ -16,6 +16,7 @@ import com.google.android.gms.location.*
 class MainActivity : AppCompatActivity() {
 
     private lateinit var roadView: RoadSurfaceView
+    private lateinit var miniMapView: MiniMapView
     private lateinit var sensorEngine: SensorEngine
     private lateinit var voiceEngine: VoiceEngine
     private lateinit var fusedLocation: FusedLocationProviderClient
@@ -37,13 +38,16 @@ class MainActivity : AppCompatActivity() {
         )
 
         setContentView(R.layout.activity_main)
-        roadView = findViewById(R.id.roadSurfaceView)
+        roadView    = findViewById(R.id.roadSurfaceView)
+        miniMapView = findViewById(R.id.miniMapView)
 
         voiceEngine  = VoiceEngine(this)
         sensorEngine = SensorEngine(this) { state ->
             // Callback desde hilo de sensor (no UI thread) → escritura @Volatile segura
             roadView.driveState = state
             voiceEngine.evaluate(state)
+            // Sincronizar color del anillo del minimapa con el estado G
+            miniMapView.updateNeonColor(neonColorFor(state.gForceState))
         }
 
         fusedLocation = LocationServices.getFusedLocationProviderClient(this)
@@ -64,6 +68,14 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         voiceEngine.shutdown()
+        miniMapView.destroy()
+    }
+
+    /** Color neón base según estado G (sin parpadeo, eso lo maneja RoadSurfaceView). */
+    private fun neonColorFor(state: com.arcadedriving.model.GForceState): Int = when (state) {
+        com.arcadedriving.model.GForceState.CRUISING -> android.graphics.Color.parseColor("#00BFFF")
+        com.arcadedriving.model.GForceState.FUN_ZONE -> android.graphics.Color.parseColor("#FFE600")
+        com.arcadedriving.model.GForceState.LIMIT    -> android.graphics.Color.parseColor("#FF2200")
     }
 
     // ─── GPS ───────────────────────────────────────────────────────────────────
@@ -73,6 +85,8 @@ class MainActivity : AppCompatActivity() {
             val loc: Location = result.lastLocation ?: return
             // loc.speed está en m/s → convertir a km/h
             sensorEngine.updateSpeed(loc.speed * 3.6f)
+            // Actualizar posición del minimapa
+            miniMapView.updateLocation(loc.latitude, loc.longitude)
         }
     }
 

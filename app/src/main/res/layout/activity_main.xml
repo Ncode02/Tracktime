@@ -9,4 +9,12 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent" />
 
+    <!-- Mini-mapa circular OSM en la zona del cielo (top-left) -->
+    <com.arcadedriving.render.MiniMapView
+        android:id="@+id/miniMapView"
+        android:layout_width="128dp"
+        android:layout_height="128dp"
+        android:layout_gravity="top|start"
+        android:layout_margin="12dp" />
+
 </FrameLayout>
