@@ -120,8 +120,8 @@ class MainActivity : AppCompatActivity() {
                     val now2 = System.currentTimeMillis()
                     if (abs(rate) > 6f && abs(prevHeadingRate) <= 6f
                             && now2 > curveCooldownMs && loc.speed > 3f) {
-                        val radiusM = (loc.speed /
-                            Math.toRadians(abs(rate).toDouble())).toFloat()
+                        val rateRad = abs(rate) * (Math.PI / 180.0).toFloat()
+                        val radiusM = if (rateRad > 0f) loc.speed / rateRad else 9999f
                         voiceEngine.announceCurve(radiusM, rate > 0f)
                         curveCooldownMs = now2 + CURVE_COOLDOWN_MS
                     }
