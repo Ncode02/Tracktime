@@ -323,9 +323,14 @@ class MiniMapView @JvmOverloads constructor(
     //  API PÚBLICA
     // ─────────────────────────────────────────────────────────────────────────
 
-    // ─── Crosshair de posición ────────────────────────────────────────────
+    fun setBearing(degrees: Float) {
+        if (mapBearing != degrees) {
+            mapBearing = degrees
+            post { invalidate() }
+        }
+    }
 
-    private fun drawCrosshair
+    fun updateLocation(lat: Double, lon: Double) {
         latitude    = lat
         longitude   = lon
         hasLocation = true
@@ -339,21 +344,7 @@ class MiniMapView @JvmOverloads constructor(
         }
     }
 
-    fun setBearing(degrees: Float) {
-        if (mapBearing != degrees) {
-            mapBearing = degrees
-            post { invalidate() }
-        }
-    }
-
-    fun setBearing(degrees: Float) {
-        if (mapBearing != degrees) {
-            mapBearing = degrees
-            post { invalidate() }
-        }
-    }
-
-    fun updateLocation(lat: Double, lon: Double) {
+    fun zoomIn() {
         if (ZOOM < ZOOM_MAX) {
             ZOOM++
             clearTileCache()
