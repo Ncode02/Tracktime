@@ -14,6 +14,7 @@ import com.arcadedriving.render.MiniMapView
 import com.arcadedriving.render.RoadSurfaceView
 import com.arcadedriving.sensor.SensorEngine
 import com.arcadedriving.voice.VoiceEngine
+import com.arcadedriving.voice.RoadCurveDetector
 import com.google.android.gms.location.*
 import kotlin.math.abs
 
@@ -24,15 +25,13 @@ class MainActivity : AppCompatActivity() {
     private lateinit var sensorEngine: SensorEngine
     private lateinit var voiceEngine: VoiceEngine
     private lateinit var fusedLocation: FusedLocationProviderClient
+    private lateinit var curveDetector: RoadCurveDetector
 
     private val PERMISSION_REQUEST = 1001
 
     // Seguimiento del rumbo GPS para calcular la tasa de giro
     private var lastBearing    = Float.NaN
     private var lastBearingMs  = 0L
-    private var prevHeadingRate  = 0f
-    private var curveCooldownMs  = 0L
-    private val CURVE_COOLDOWN_MS = 7_000L
 
     // ─── Lifecycle ─────────────────────────────────────────────────────────────
 
@@ -57,6 +56,9 @@ class MainActivity : AppCompatActivity() {
         findViewById<TextView>(R.id.btnMapZoomOut).setOnClickListener { miniMapView.zoomOut() }
 
         voiceEngine  = VoiceEngine(this)
+        curveDetector = RoadCurveDetector { radiusM, isRight, distM ->
+            voiceEngine.announceCurve(radiusM, isRight, distM)
+        }
         sensorEngine = SensorEngine(this) { state ->
             // Callback desde hilo de sensor (no UI thread) → escritura @Volatile segura
             roadView.driveState = state
@@ -85,6 +87,7 @@ class MainActivity : AppCompatActivity() {
     override fun onDestroy() {
         super.onDestroy()
         voiceEngine.shutdown()
+        curveDetector.destroy()
         miniMapView.destroy()
     }
 
@@ -115,22 +118,13 @@ class MainActivity : AppCompatActivity() {
                     if (delta < -180f) delta += 360f
                     val rate = delta / dt
                     sensorEngine.updateHeadingRate(rate)
-
-                    // Detectar inicio de curva: headingRate cruza umbral
-                    val now2 = System.currentTimeMillis()
-                    if (abs(rate) > 6f && abs(prevHeadingRate) <= 6f
-                            && now2 > curveCooldownMs && loc.speed > 3f) {
-                        val rateRad = abs(rate) * (Math.PI / 180.0).toFloat()
-                        val radiusM = if (rateRad > 0f) loc.speed / rateRad else 9999f
-                        voiceEngine.announceCurve(radiusM, rate > 0f)
-                        curveCooldownMs = now2 + CURVE_COOLDOWN_MS
-                    }
-                    prevHeadingRate = rate
                 }
                 lastBearing   = loc.bearing
                 lastBearingMs = System.currentTimeMillis()
                 // Rotar mapa con el rumbo (heading-up como Maps)
                 miniMapView.setBearing(loc.bearing)
+                // Detección de curvas por adelantado (OSM)
+                curveDetector.update(loc.latitude, loc.longitude, loc.bearing, loc.speed)
             } else if (loc.speed <= 1.4f) {
                 sensorEngine.updateHeadingRate(0f)  // parado = carretera recta
                 lastBearing = Float.NaN

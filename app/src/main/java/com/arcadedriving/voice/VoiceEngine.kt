@@ -100,20 +100,22 @@ class VoiceEngine(context: Context) : TextToSpeech.OnInitListener {
     }
 
     /**
-     * Anuncia una curva detectada por GPS.
-     * @param radiusMeters radio estimado en metros (speed / headingRate_rad_s)
-     * @param isRight true = giro a la derecha
+     * Anuncia una curva detectada por adelantado con OSM.
+     * @param radiusMeters  radio estimado en metros
+     * @param isRight       true = giro a la derecha
+     * @param distanceMeters distancia hasta la curva en metros
      */
-    fun announceCurve(radiusMeters: Float, isRight: Boolean) {
+    fun announceCurve(radiusMeters: Float, isRight: Boolean, distanceMeters: Float) {
         if (!ready.get()) return
-        val dir = if (isRight) "derecha" else "izquierda"
+        val dir    = if (isRight) "derecha" else "izquierda"
+        val meters = ((distanceMeters + 25f) / 50f).toInt() * 50   // redondeo a ±50 m
         val (tipo, queue) = when {
-            radiusMeters < 60f  -> Pair("¡Muy cerrada! ¡Frena!",  TextToSpeech.QUEUE_FLUSH)
-            radiusMeters < 150f -> Pair("cerrada",                 TextToSpeech.QUEUE_ADD)
-            radiusMeters < 400f -> Pair("abierta",                 TextToSpeech.QUEUE_ADD)
-            else                -> Pair("muy abierta",             TextToSpeech.QUEUE_ADD)
+            radiusMeters < 60f  -> Pair("muy cerrada, ¡frena!",  TextToSpeech.QUEUE_FLUSH)
+            radiusMeters < 150f -> Pair("cerrada",               TextToSpeech.QUEUE_ADD)
+            radiusMeters < 400f -> Pair("abierta",               TextToSpeech.QUEUE_ADD)
+            else                -> Pair("muy abierta",           TextToSpeech.QUEUE_ADD)
         }
-        tts.speak("Curva $tipo, $dir", queue, null, "curve_${System.nanoTime()}")
+        tts.speak("En $meters metros, curva $tipo a la $dir", queue, null, "curve_${System.nanoTime()}")
         speaking.set(true)
     }
 

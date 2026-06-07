@@ -8,16 +8,7 @@ import com.arcadedriving.model.GForceState
  */
 object ArcadeMessages {
 
-    // < 0.5 G && velocidad < 15 km/h
-    private val stopped = listOf(
-        "¡VAS PARAO!",
-        "¿Aparcando o conduciendo?",
-        "¡Mi abuela va más rápido!",
-        "¡El semáforo está en verde, chaval!",
-        "¿Nos vamos a pata o qué?"
-    )
-
-    // < 0.5 G && velocidad normal → hype tranquilo
+    // < 0.5 G → hype tranquilo
     private val cruising = listOf(
         "¡Vamos, desconfínate!",
         "¡El motor quiere cantar, dale gas!",
@@ -56,14 +47,12 @@ object ArcadeMessages {
      * [speedKmh] = -1 significa que el GPS aún no tiene señal (no se habla de velocidad).
      */
     fun next(state: GForceState, speedKmh: Float): String {
-        val pool = when {
-            state == GForceState.CRUISING && speedKmh in 0f..15f -> stopped
-            state == GForceState.CRUISING                        -> cruising
-            state == GForceState.FUN_ZONE                        -> funZone
-            state == GForceState.LIMIT                           -> limit
-            else                                                 -> cruising
+        val pool = when (state) {
+            GForceState.CRUISING -> cruising
+            GForceState.FUN_ZONE -> funZone
+            GForceState.LIMIT    -> limit
         }
-        val key = state.name + if (speedKmh in 0f..15f) "_slow" else ""
+        val key = state.name
         val i = indices.getOrDefault(key, 0)
         indices[key] = (i + 1) % pool.size
         return pool[i]
