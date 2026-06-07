@@ -62,37 +62,8 @@ class VoiceEngine(context: Context) : TextToSpeech.OnInitListener {
 
     // ─── API pública ──────────────────────────────────────────────────────────
 
-    /**
-     * Evalúa el estado actual y dispara TTS si procede.
-     * Llamar desde cualquier hilo (sensor thread).
-     */
-    fun evaluate(state: DriveState) {
-        if (!ready.get() || speaking.get()) return
-
-        val gState = state.gForceState
-        val now    = System.currentTimeMillis()
-
-        // Detectar cambio de estado
-        if (gState != lastState) {
-            lastState = gState
-            stateEntry.set(now)
-        }
-
-        // Esperar mínimo en el estado (evita hablar por picos instantáneos)
-        if (now - stateEntry.get() < MIN_STATE_MS) return
-
-        // Comprobar cooldown
-        val last     = lastSpoken.getOrDefault(gState, 0L)
-        val cooldown = cooldownMs.getOrDefault(gState, 10_000L)
-        if (now - last < cooldown) return
-
-        // No hablar de velocidad si GPS aún no disponible
-        if (gState == GForceState.CRUISING && state.speedKmh < 0f) return
-
-        val msg = ArcadeMessages.next(gState, state.speedKmh)
-        lastSpoken[gState] = now
-        speak(msg)
-    }
+    /** No hace nada — solo curvas activas. Mantenida para compatibilidad. */
+    fun evaluate(state: DriveState) { /* desactivado: solo TTS de curvas */ }
 
     fun shutdown() {
         tts.stop()
